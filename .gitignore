@@ -1,0 +1,16 @@
+.venv/
+.cache/
+__pycache__/
+*.egg-info/
+models/*.task
+data/*.jsonl
+snapshots/
+.DS_Store
+.build/
+**/secrets.h
+firmware/finger-receiver/leds_config.h
+.env
+.env.*
+!.env.example
+*.pem
+*.key
