@@ -3,6 +3,8 @@
 __pycache__/
 *.egg-info/
 models/*.task
+models/*.tflite
+models/*.download
 data/*.jsonl
 snapshots/
 .DS_Store

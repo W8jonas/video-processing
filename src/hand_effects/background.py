@@ -1,6 +1,8 @@
-"""Explicit in-memory clean-plate capture and reversible full-frame fade."""
+"""Explicit clean-plate capture and reversible full-frame or person-only fade."""
 
 from math import ceil
+
+import numpy as np
 
 
 class BackgroundEffect:
@@ -61,9 +63,15 @@ class BackgroundEffect:
         self.origin = self.target = self.since = 0.
         self.message = 'Ao vivo. I: desaparecer | B: novo fundo'
 
-    def compose(self, cv2, live, now):
+    def compose(self, cv2, live, now, person_mask=None):
         if self.background is None:
             return live.copy()
+        if person_mask is not None:
+            if person_mask.shape != live.shape[:2] or not np.isfinite(person_mask).all():
+                raise ValueError('Mascara de pessoa deve corresponder ao frame atual')
+            weight = np.clip(person_mask, 0., 1.)[:, :, None] * self.strength(now)
+            composed = live.astype(np.float32) * (1. - weight) + self.background * weight
+            return np.rint(composed).clip(0, 255).astype(np.uint8)
         return cv2.addWeighted(live, 1. - self.strength(now), self.background,
                                self.strength(now), 0.)
 
@@ -77,7 +85,7 @@ class BackgroundEffect:
         amount = self.strength(now)
         if 0. < amount < 1.:
             return 'DESAPARECENDO...' if self.target else 'REAPARECENDO...'
-        return 'INVISIVEL (foto do fundo)' if amount else 'VISIVEL'
+        return 'INVISIVEL' if amount else 'VISIVEL'
 
 
 def handle_key(effect, key, now):
@@ -93,18 +101,21 @@ def handle_key(effect, key, now):
         effect.show_live()
 
 
-def local_preview(cv2, effect, published, now):
+def local_preview(cv2, effect, published, now, mask=None):
     """Local instructions and candidate preview never enter the virtual camera."""
     from .output import fit_frame
 
     if effect.candidate is not None:
         height, width = published.shape[:2]
         preview = fit_frame(cv2, effect.candidate, width, height)
+    elif mask is not None:
+        mask_frame = cv2.cvtColor((mask * 255).astype(np.uint8), cv2.COLOR_GRAY2BGR)
+        preview = fit_frame(cv2, mask_frame, published.shape[1], published.shape[0])
     else:
         preview = published.copy()
     cv2.rectangle(preview, (0, 0), (preview.shape[1], 90), (25, 25, 25), -1)
     for index, text in enumerate((effect.status(now), effect.message,
-                                  'B: fundo | ENTER: confirmar | I: efeito | R: ao vivo | H: maos | Q: sair')):
+                                  'B: fundo | ENTER: confirmar | I: efeito | R: ao vivo | H: maos | M: mascara | Q: sair')):
         cv2.putText(preview, text, (12, 24 + index * 26), cv2.FONT_HERSHEY_SIMPLEX,
                     .48, (240, 240, 240), 1, cv2.LINE_AA)
     return preview

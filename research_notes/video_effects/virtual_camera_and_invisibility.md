@@ -88,3 +88,27 @@ video conversion scripts. Any runtime choice needs a local full-pipeline test.
 No published demo or synthetic mask test will establish real-world success in
 the user's room. The roadmap separates virtual-device validation, clean-plate
 capture, simple replacement, selective composition, gestures and quality work.
+
+## Implementation verification: selective composition
+
+On 2026-11-02, stage 4 was implemented with the official version-1 landscape
+model. Local SHA-256:
+`490e9ea734313e0de10fa0cd9e3c6133e36ea4db2b7a49bde9ef019f72796b8e`.
+MediaPipe 0.10.35 returned labels `['selfie']` and a single float32 confidence
+mask shaped `(height, width, 1)`. The implementation verifies metadata rather
+than assuming the overview's conceptual two categories imply two output tensors.
+
+The real model was run on Google's
+[portrait sample](https://storage.googleapis.com/mediapipe-assets/portrait.jpg),
+resized to 384×480, using CPU on macOS arm64. A synthetic replacement background
+verified unchanged original pixels wherever the refined mask is zero and
+replacement pixels wherever it is one. Intermediate pixels are blended. This
+was an image inference/composition check, not a webcam benchmark or room test.
+
+The local pipeline saturates confidence between 0.2 and 0.6, dilates by a
+configurable radius (default three source-frame pixels), and feathers edges.
+These are prototype engineering choices, not model guarantees. No temporal
+filtering or shadow removal is implemented. Every recognized person can be
+removed; there is no identity selection. Hair and thin fingers need local review.
+119 automated tests passed across the repository, including selective output,
+live background changes, mask metadata, and original-frame hand inference.

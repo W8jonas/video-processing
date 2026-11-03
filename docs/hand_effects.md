@@ -4,8 +4,9 @@ Etapa 1 implementada em 02/11/2026: programa `hand-effects`, independente dos
 experimentos de Libras, geometria e ESP8266. A saída mostra a webcam com as
 articulações e os dedos 1=indicador, 2=médio, 3=anelar e 4=mindinho.
 Verde indica dedo estendido; cinza indica recolhido. As etapas 2/3 acrescentam
-captura do fundo e invisibilidade inicial por tecla. Segmentação da pessoa e
-controle por gesto seguem no [roadmap](roadmap_video_effects.md).
+captura do fundo e invisibilidade por tecla. A etapa 4 substitui apenas a região
+da pessoa, preservando o vídeo ao vivo fora dela. O controle por gesto segue no
+[roadmap](roadmap_video_effects.md).
 
 ## Preparação no Mac
 
@@ -14,6 +15,7 @@ OBS 33.0.1 e pyvirtualcam 0.15.0 foram instalados nesta máquina. Em outro ambie
 ```sh
 brew install --cask obs
 .venv/bin/python -m pip install -e '.[effects]'
+.venv/bin/hand-effects --download-segmenter
 ```
 
 Uma vez por instalação:
@@ -66,10 +68,39 @@ câmera fixa e a janela do programa em foco para usar as teclas:
 4. Pressione **I** para desaparecer. Pressione **I** novamente para reaparecer,
    com transição padrão de meio segundo. **R** retorna imediatamente ao vivo.
 
-O efeito inicial substitui o vídeo inteiro pela foto do fundo: pessoas e objetos
-em movimento também ficam congelados. O detector continua lendo a webcam
-original enquanto a saída mostra a foto. Remover somente a pessoa e alternar
-por gesto são as próximas etapas.
+O efeito padrão usa segmentação para substituir a região da pessoa pela foto
+do fundo. Fora dessa região, o vídeo continua ao vivo. O detector de mãos segue
+lendo a webcam original enquanto você desaparece. As marcações das mãos são
+ocultadas na saída durante o efeito para não deixarem desenhos flutuantes.
+
+**M** alterna a visualização local da máscara: branco é a região removida,
+preto é o vídeo preservado. A máscara não é enviada ao Meet; durante a confirmação
+do fundo, o preview da foto tem prioridade. **H** continua controlando as
+marcações quando você está visível. Alternar por gesto será a próxima etapa.
+
+O recorte usa o modelo oficial MediaPipe SelfieSegmenter landscape, versão 1,
+executado localmente. O arquivo é baixado explicitamente, verificado por SHA-256
+e ignorado pelo Git. O modelo foi carregado com MediaPipe 0.10.35 e apresentou
+um canal de confiança chamado `selfie`; o código verifica os rótulos antes de
+compor, sem presumir que exista um segundo canal.
+[Modelos](https://developers.google.com/edge/mediapipe/solutions/vision/image_segmenter),
+[API Python](https://developers.google.com/edge/mediapipe/solutions/vision/image_segmenter/python),
+verificados em 02/11/2026.
+
+Cabelo, dedos, roupa e sombras podem deixar resíduos ou halos. A máscara recebe
+uma pequena expansão e suavização das bordas; use `--mask-margin 6` para testar
+um recorte maior (padrão: 3 pixels; zero desativa a expansão). Não há seleção de
+identidade: todas as pessoas que o modelo reconhecer podem desaparecer.
+Somente o cenário fora da máscara permanece ao vivo; a parte escondida atrás
+do corpo vem da foto e não acompanha movimentos ocorridos ali.
+
+O modo anterior, que congela todo o cenário, permanece disponível:
+
+```sh
+.venv/bin/hand-effects --camera 1 --effect frame
+```
+
+Esse modo dispensa o modelo de segmentação. A seleção padrão é `--effect person`.
 
 O fundo fica somente na memória e precisa ser capturado em cada execução.
 Iniciar nova captura limpa a referência anterior e volta ao vivo. Falha de leitura
@@ -113,7 +144,8 @@ Testes automatizados: proporções e canais BGR, cores do padrão, identificaç�
 individual dos dedos, saída sem webcam, liberação da câmera virtual em falhas,
 contagem regressiva, confirmação e cancelamento do fundo, invalidação por mudança
 de resolução, transição reversível e inferência no vídeo original durante o
-efeito. Comando:
+efeito, preservação de movimento fora da pessoa, identificação dos canais da
+máscara, refinamento de bordas e diagnóstico restrito à janela local. Comando:
 
 ```sh
 .venv/bin/python -m unittest discover -s tests -v
@@ -131,7 +163,11 @@ original por padrão. Reinicie o processo para aplicar a alteração. A orienta�
 vista por outro participante e cinco minutos sem travar ainda precisam ser
 confirmados; testes automatizados não comprovam esses critérios.
 
-Após a implementação da captura/invisibilidade inicial, os 109 testes passaram.
-A integração de teclado, captura, publicação e inferência foi testada com frames
-simulados; o efeito novo ainda precisa ser experimentado pelo usuário no ambiente
-real e no Meet.
+O usuário confirmou que a captura/invisibilidade inicial funcionou. Com a remoção
+seletiva, os 119 testes passaram. Foi feito também um ensaio com o modelo real
+e a [imagem oficial portrait.jpg](https://storage.googleapis.com/mediapipe-assets/portrait.jpg),
+redimensionada para 384×480: pessoa/fundo encontrados, pixels de máscara zero
+preservados e pixels de máscara um substituídos. Esse ensaio valida o caminho
+de inferência/composição, sem estabelecer qualidade em vídeo, FPS ou resultado
+na sala do usuário. O novo recorte ainda precisa ser experimentado na webcam
+e no Meet.

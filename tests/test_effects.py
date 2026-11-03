@@ -69,7 +69,7 @@ class PipelineTests(unittest.TestCase):
         sink.__enter__.return_value = sink
         effect = BackgroundEffect(fade=0.)
         effect.begin_capture(-10.)
-        args = parser().parse_args(['--max-frames', '3'])
+        args = parser().parse_args(['--max-frames', '3', '--effect', 'frame'])
         def paint(cv, frame, hands):
             frame[:] = 200
         with patch.object(cv2, 'VideoCapture', return_value=camera), \
@@ -99,7 +99,7 @@ class PipelineTests(unittest.TestCase):
             hand_landmarks=[], hand_world_landmarks=[], handedness=[])
         sink = MagicMock()
         sink.__enter__.return_value = sink
-        args = parser().parse_args(['--headless'])
+        args = parser().parse_args(['--headless', '--effect', 'frame'])
         def paint(cv, frame, hands):
             frame[:] = 200
         with patch.object(cv2, 'VideoCapture', return_value=camera), \

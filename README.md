@@ -6,8 +6,11 @@ Execute `.venv/bin/hand-effects --camera 1` após autorizar a extensão do OBS.
 o usuário confirmou a seleção da câmera virtual e as marcações no Meet.
 Agora é possível capturar o fundo com **B**, confirmar com **Enter** e
 desaparecer/reaparecer com **I**. **R** retorna ao vivo imediatamente.
-Esta primeira versão mostra a foto inteira do cenário; remoção seletiva da
-pessoa e controle por gesto seguem no [roadmap em etapas](docs/roadmap_video_effects.md).
+O efeito padrão agora remove a região da pessoa e mantém o restante do vídeo
+ao vivo. **M** mostra a máscara apenas na janela local. O modelo oficial já foi
+baixado nesta máquina; em outra instalação execute
+`.venv/bin/hand-effects --download-segmenter`. O controle por gesto segue no
+[roadmap em etapas](docs/roadmap_video_effects.md).
 
 Protótipo local com webcam, MediaPipe Tasks e OpenCV. Desenha 21 articulações por
 mão, acompanha até duas mãos, estima quais dedos estão estendidos e permite

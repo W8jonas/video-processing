@@ -12,6 +12,7 @@ from hand_libras.app import ROOT, describe, draw_hands
 from hand_math.fingers import FingerTracker, attach_world_points
 from .output import fit_frame, open_virtual, test_pattern
 from .background import BackgroundEffect, handle_key, local_preview
+from .segmentation import PersonSegmenter, download_model
 
 WINDOW = 'hand effects - camera output'
 FINGERS = ((1, 'indicador', 8), (2, 'medio', 12), (3, 'anelar', 16), (4, 'minimo', 20))
@@ -28,6 +29,11 @@ def parser():
     result.add_argument('--fps', type=int, default=30, help='Limite de FPS; desempenho real depende da inferencia')
     result.add_argument('--countdown', type=float, default=5., help='Segundos para sair da imagem ao capturar fundo')
     result.add_argument('--fade', type=float, default=.5, help='Duracao da transicao de invisibilidade em segundos')
+    result.add_argument('--effect', choices=('person', 'frame'), default='person',
+                        help='Remover pessoa (padrao) ou mostrar foto inteira (modo anterior)')
+    result.add_argument('--segment-model', type=Path, default=ROOT / 'models/selfie_segmenter_landscape.tflite')
+    result.add_argument('--download-segmenter', action='store_true', help='Baixar modelo oficial de pessoa e sair')
+    result.add_argument('--mask-margin', type=int, default=3, help='Expansao da mascara em pixels, 0..20')
     orientation = result.add_mutually_exclusive_group()
     orientation.add_argument('--mirror', dest='no_mirror', action='store_false',
                              help='Espelhar o video enviado (opcional)')
@@ -58,6 +64,7 @@ def run(args):
     frames = failures = total_failures = 0
     timestamp = -1
     annotations = True
+    show_mask = False
     effect = BackgroundEffect(args.countdown, args.fade)
     with ExitStack() as stack:
         if not args.headless:
@@ -70,7 +77,7 @@ def run(args):
             frame = test_pattern(cv2, args.width, args.height, 0)
             virtual.send(frame)
             return dict(ok=True, device=virtual.device, width=args.width, height=args.height)
-        detector = camera = None
+        detector = camera = segmenter = None
         tracker = FingerTracker()
         if not args.test_pattern:
             if not args.model.is_file():
@@ -84,15 +91,19 @@ def run(args):
                     running_mode=vision.RunningMode.VIDEO, num_hands=2,
                     min_hand_detection_confidence=.6, min_hand_presence_confidence=.6,
                     min_tracking_confidence=.6)))
+            if args.effect == 'person':
+                segmenter = stack.enter_context(PersonSegmenter(args.segment_model, args.mask_margin))
             camera = cv2.VideoCapture(args.camera)
             stack.callback(camera.release)
             if not camera.isOpened():
                 raise RuntimeError('Webcam indisponivel. Confira --camera, permissao do macOS e outros apps.')
-        print('B: capturar fundo | ENTER: confirmar | I: invisibilidade | R: ao vivo | H: maos | Q/Esc: sair', flush=True)
+        print('B: capturar fundo | ENTER: confirmar | I: invisibilidade | R: ao vivo | H: maos | M: mascara | Q/Esc: sair', flush=True)
+        print('Efeito: ' + args.effect, flush=True)
         print('Contagem, confirmacao e controles aparecem apenas na janela local. Fundo guardado em memoria.', flush=True)
         started = time.monotonic()
         while not args.max_frames or frames < args.max_frames:
             iteration = time.monotonic()
+            mask = None
             if args.test_pattern:
                 output = test_pattern(cv2, args.width, args.height, frames)
             else:
@@ -113,28 +124,33 @@ def run(args):
                 now = time.monotonic()
                 effect.update(original, now)
                 timestamp = max(timestamp + 1, int(now * 1000))
-                result = detector.detect_for_video(mp.Image(
-                    image_format=mp.ImageFormat.SRGBA,
-                    data=cv2.cvtColor(original, cv2.COLOR_BGR2RGBA)), timestamp)
+                image = mp.Image(image_format=mp.ImageFormat.SRGB,
+                                 data=cv2.cvtColor(original, cv2.COLOR_BGR2RGB))
+                result = detector.detect_for_video(image, timestamp)
                 hands = describe(result, original.shape[1], original.shape[0])
                 attach_world_points(hands, result)
                 hands = tracker.update(hands, now)
+                if segmenter and (show_mask or effect.strength(now) > 0 or effect.target > 0):
+                    mask = segmenter.mask(cv2, image, timestamp, original.shape[1], original.shape[0])
                 processed = original.copy()
-                if annotations:
+                if annotations and effect.strength(now) == 0:
                     annotate(cv2, processed, hands)
-                composed = effect.compose(cv2, processed, now)
+                composed = effect.compose(cv2, processed, now, mask)
                 output = fit_frame(cv2, composed, args.width, args.height)
             if virtual:
                 virtual.send(output)
             frames += 1
             if not args.headless:
-                preview = output if args.test_pattern else local_preview(cv2, effect, output, time.monotonic())
+                preview = output if args.test_pattern else local_preview(
+                    cv2, effect, output, time.monotonic(), mask if show_mask else None)
                 cv2.imshow(WINDOW, preview)
                 key = cv2.waitKey(1) & 0xFF
                 if key in (27, ord('q')) or cv2.getWindowProperty(WINDOW, cv2.WND_PROP_VISIBLE) < 1:
                     break
                 if key == ord('h'):
                     annotations = not annotations
+                elif key == ord('m'):
+                    show_mask = not show_mask
                 elif not args.test_pattern:
                     handle_key(effect, key, time.monotonic())
             # Bound capture/preview rate too; no frame queue grows under load.
@@ -148,11 +164,14 @@ def main(argv=None):
     args = cli.parse_args(argv)
     if (not 64 <= args.width <= 3840 or not 64 <= args.height <= 2160
             or args.width % 2 or args.height % 2 or not 1 <= args.fps <= 60 or args.max_frames < 0
-            or not 1 <= args.countdown <= 30 or not 0 <= args.fade <= 3):
-        cli.error('Use dimensoes pares 64..3840 x 64..2160, fps 1..60, frames >= 0, countdown 1..30 e fade 0..3')
+            or not 1 <= args.countdown <= 30 or not 0 <= args.fade <= 3 or not 0 <= args.mask_margin <= 20):
+        cli.error('Use dimensoes pares 64..3840 x 64..2160, fps 1..60, frames >= 0, countdown 1..30, fade 0..3 e mask-margin 0..20')
     if args.check and (args.preview_only or args.test_pattern):
         cli.error('--check testa somente a saida virtual; remova --preview-only/--test-pattern')
     try:
+        if args.download_segmenter:
+            download_model(args.segment_model)
+            return 0
         print(json.dumps(run(args), ensure_ascii=False))
         return 0
     except KeyboardInterrupt:

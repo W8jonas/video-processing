@@ -6,9 +6,9 @@ gesto, usando uma captura prévia do ambiente vazio.
 
 Este documento define um novo software, separado de `hand-esp`, Libras e
 geometria. A saída virtual com marcações foi implementada como `hand-effects`;
-consulte [preparação e comandos](hand_effects.md). Ainda não há aplicativo de
-remoção seletiva da pessoa. A invisibilidade inicial já alterna entre vídeo
-ao vivo e foto confirmada do fundo. O usuário confirmou a câmera virtual e as marcações no Meet;
+consulte [preparação e comandos](hand_effects.md). A remoção seletiva da pessoa
+foi implementada usando MediaPipe; o modo de foto inteira continua opcional.
+O usuário confirmou a câmera virtual, as marcações e a invisibilidade inicial no Meet;
 orientação no destinatário e estabilidade prolongada ainda precisam de validação.
 
 ## Decisões iniciais
@@ -117,9 +117,10 @@ Preview, vídeo publicado e diagnóstico devem ter saídas independentes.
 | E5 · Controle por gestos | Gesto confirmado alterna visível/invisível sem teclado | Dez ciclos consecutivos de ida/volta; um gesto mantido gera só uma ação; detector segue ativo no original |
 | E6 · Qualidade e desempenho | Reduzir halos, sombra residual e flicker; controlar atrasos | Sessão com iluminação real; medir FPS e latência completa; aceitar ou trocar o modelo com base no teste |
 
-E2/E3 estão implementadas com captura em memória, confirmação explícita e
-transição por tecla, com testes automatizados. O ensaio real do novo efeito
-ainda está pendente. Os critérios da tabela são metas, não resultados já medidos.
+E2/E3 foram implementadas e aprovadas funcionalmente pelo usuário. E4 está
+implementada com testes de composição seletiva e modelo real sobre imagem
+oficial; o ensaio na webcam ainda está pendente. Os critérios da tabela são
+metas, não resultados já medidos.
 
 ### E1 · Primeiro entregável
 
@@ -186,7 +187,12 @@ I alterna a foto inteira do fundo com o vídeo e R retorna ao vivo. A interface
 local mostra a contagem e a confirmação; a saída virtual recebe apenas o vídeo
 composto. Os 109 testes passaram, incluindo integração com frames simulados.
 
-Próximo trabalho: experimentar a captura/invisibilidade inicial no ambiente real
-e no Meet, seguindo para remoção seletiva (E4). O novo pacote `hand_effects`
-contém captura, marcações, preview, fundo em memória, transição e saída virtual;
-segmentação e controle por gestos virão nas etapas seguintes.
+O usuário confirmou que E2/E3 funcionaram. E4 agora é o modo padrão: modelo
+SelfieSegmenter landscape, inferência nos frames originais, composição com máscara
+suave e diagnóstico local pela tecla M. A saída omite marcações de mãos durante
+a invisibilidade. O modo anterior pode ser acessado por `--effect frame`.
+Os 119 testes passaram; o modelo real foi ensaiado com imagem oficial, sem
+medição de desempenho em webcam nesta etapa.
+
+Próximo trabalho: experimentar a remoção seletiva no ambiente real e no Meet,
+ajustar bordas conforme o resultado e seguir para controle por gestos (E5).
