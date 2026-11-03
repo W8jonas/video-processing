@@ -12,10 +12,14 @@ dependencies = [
     "opencv-contrib-python>=4.11,<5",
 ]
 
+[project.optional-dependencies]
+effects = ["pyvirtualcam>=0.14,<0.16"]
+
 [project.scripts]
 hand-libras = "hand_libras.app:main"
 hand-math = "hand_math.app:main"
 hand-esp = "hand_esp.app:main"
+hand-effects = "hand_effects.app:main"
 
 [tool.setuptools.packages.find]
 where = ["src"]

@@ -1,0 +1,98 @@
+# Vídeo processado no Google Meet
+
+Etapa 1 implementada em 02/11/2026: programa `hand-effects`, independente dos
+experimentos de Libras, geometria e ESP8266. A saída mostra a webcam com as
+articulações e os dedos 1=indicador, 2=médio, 3=anelar e 4=mindinho.
+Verde indica dedo estendido; cinza indica recolhido. A invisibilidade pertence
+às próximas etapas do [roadmap](roadmap_video_effects.md).
+
+## Preparação no Mac
+
+OBS 33.0.1 e pyvirtualcam 0.15.0 foram instalados nesta máquina. Em outro ambiente:
+
+```sh
+brew install --cask obs
+.venv/bin/python -m pip install -e '.[effects]'
+```
+
+Uma vez por instalação:
+
+1. Abra OBS e clique em **Iniciar câmera virtual**. O assistente inicial pode
+   ser cancelado; não é necessário configurar transmissão nem adicionar webcam.
+2. Autorize a extensão do OBS quando o macOS solicitar. Em versões recentes:
+   **Ajustes do Sistema → Geral → Itens de Início e Extensões → Extensões de Câmera**.
+3. Inicie/pare a câmera virtual e encerre OBS com **Cmd+Q**. O Python será o
+   produtor do vídeo; OBS não deve produzir simultaneamente.
+
+Procedimento conferido na documentação do
+[pyvirtualcam](https://github.com/letmaik/pyvirtualcam#macos-obs) e do
+[OBS](https://obsproject.com/kb/virtual-camera-troubleshooting) em 02/11/2026.
+A autorização da extensão requer interação do usuário no macOS.
+
+## Executar
+
+Primeiro, confirme que o dispositivo virtual pode ser aberto. Esse comando
+envia um frame de teste e encerra; não mantém uma transmissão:
+
+```sh
+.venv/bin/hand-effects --check
+```
+
+Para usar a webcam USB já identificada como câmera 1:
+
+```sh
+.venv/bin/hand-effects --camera 1
+```
+
+Mantenha o programa aberto. No Meet, selecione **Configurações → Vídeo →
+Câmera → OBS Virtual Camera**. Escolha o microfone normalmente e desative os
+efeitos de fundo do Meet durante a validação. A janela local mostra o mesmo
+frame enviado, sem painel de controle. **H** alterna as marcações; **Q/Esc** sai
+quando a janela está em foco. No terminal, **Ctrl+C** também encerra.
+
+## Diagnóstico
+
+```sh
+# Conferir cores RGB, texto ABC123 e contador, sem abrir a webcam
+.venv/bin/hand-effects --test-pattern
+
+# Validar apenas a webcam e as mãos, mesmo sem extensão virtual autorizada
+.venv/bin/hand-effects --camera 1 --preview-only
+
+# Saída menor, sem forçar o modo de captura da câmera USB
+.venv/bin/hand-effects --camera 1 --width 640 --height 480 --fps 20
+```
+
+A saída padrão é 1280×720, limitada a 30 FPS; não é uma promessa de desempenho.
+O redimensionamento preserva proporções com barras pretas. A captura usa o modo
+padrão da webcam. A orientação original é preservada por padrão; use `--mirror`
+se quiser espelhar o vídeo enviado. `--no-mirror` continua aceito explicitamente.
+Confirme texto e orientação pela imagem recebida por outro participante, pois o
+preview do Meet pode parecer diferente.
+
+Se o dispositivo não aparecer, termine a configuração do OBS e reabra o navegador.
+Se houver disputa pela webcam, feche os outros programas que a utilizam.
+Não abra duas instâncias de `hand-effects`. O programa não grava vídeo ou fotos
+nem envia comandos ao ESP. A publicação aos participantes ocorre pelo Meet.
+
+## Validação
+
+Testes automatizados: proporções e canais BGR, cores do padrão, identificação
+individual dos dedos, saída sem webcam, liberação da câmera virtual em falhas
+e validação dos argumentos. Comando:
+
+```sh
+.venv/bin/python -m unittest discover -s tests -v
+```
+
+Ensaio local: webcam 1, modo nativo, saída 1280×720, CPU, 30 frames sem janela,
+no Mac Apple M2 Pro com macOS 26.6.2/Python 3.12.6/MediaPipe 0.10.35/OpenCV
+4.11.0. Resultado: 30 frames, zero falhas de captura, 9,3 FPS no loop completo
+de captura/inferência/composição/limitação, sem publicação virtual. A amostra
+é curta e não estabelece desempenho em reunião nem precisão dos dedos.
+
+O usuário confirmou a seleção da câmera virtual OBS no Meet e a exibição das
+marcações das mãos. Relatou espelhamento; o programa agora preserva a orientação
+original por padrão. Reinicie o processo para aplicar a alteração. A orientação
+vista por outro participante e cinco minutos sem travar ainda precisam ser
+confirmados; testes automatizados não comprovam esses critérios.
