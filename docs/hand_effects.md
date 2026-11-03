@@ -3,8 +3,9 @@
 Etapa 1 implementada em 02/11/2026: programa `hand-effects`, independente dos
 experimentos de Libras, geometria e ESP8266. A saída mostra a webcam com as
 articulações e os dedos 1=indicador, 2=médio, 3=anelar e 4=mindinho.
-Verde indica dedo estendido; cinza indica recolhido. A invisibilidade pertence
-às próximas etapas do [roadmap](roadmap_video_effects.md).
+Verde indica dedo estendido; cinza indica recolhido. As etapas 2/3 acrescentam
+captura do fundo e invisibilidade inicial por tecla. Segmentação da pessoa e
+controle por gesto seguem no [roadmap](roadmap_video_effects.md).
 
 ## Preparação no Mac
 
@@ -46,9 +47,40 @@ Para usar a webcam USB já identificada como câmera 1:
 
 Mantenha o programa aberto. No Meet, selecione **Configurações → Vídeo →
 Câmera → OBS Virtual Camera**. Escolha o microfone normalmente e desative os
-efeitos de fundo do Meet durante a validação. A janela local mostra o mesmo
-frame enviado, sem painel de controle. **H** alterna as marcações; **Q/Esc** sai
-quando a janela está em foco. No terminal, **Ctrl+C** também encerra.
+efeitos de fundo do Meet durante a validação. A janela local acrescenta instruções
+e o preview da captura; esses controles não são enviados ao Meet. **H** alterna
+as marcações; **Q/Esc** sai quando a janela está em foco. No terminal, **Ctrl+C**
+também encerra.
+
+## Capturar o fundo e desaparecer
+
+Encerre a versão anterior e execute novamente o mesmo comando. Mantenha a
+câmera fixa e a janela do programa em foco para usar as teclas:
+
+1. Pressione **B**. A contagem padrão dá cinco segundos para sair completamente
+   do enquadramento. Ela aparece apenas localmente; o vídeo no Meet segue ao vivo.
+2. Aguarde a foto do cenário e volte. Confira o preview congelado na janela:
+   ele deve mostrar o ambiente sem você e sem marcações de mãos.
+3. Pressione **Enter** para confirmar. **B** refaz a foto; **C** descarta a captura.
+   A confirmação é manual; não há segmentador verificando se o ambiente está vazio.
+4. Pressione **I** para desaparecer. Pressione **I** novamente para reaparecer,
+   com transição padrão de meio segundo. **R** retorna imediatamente ao vivo.
+
+O efeito inicial substitui o vídeo inteiro pela foto do fundo: pessoas e objetos
+em movimento também ficam congelados. O detector continua lendo a webcam
+original enquanto a saída mostra a foto. Remover somente a pessoa e alternar
+por gesto são as próximas etapas.
+
+O fundo fica somente na memória e precisa ser capturado em cada execução.
+Iniciar nova captura limpa a referência anterior e volta ao vivo. Falha de leitura
+ou mudança na resolução também invalida o fundo. Se mudar a câmera de posição,
+os móveis ou a iluminação, recapture com **B**; esses casos não são detectados
+automaticamente.
+
+```sh
+# Mais tempo para sair do enquadramento e transição de um segundo
+.venv/bin/hand-effects --camera 1 --countdown 8 --fade 1
+```
 
 ## Diagnóstico
 
@@ -78,8 +110,10 @@ nem envia comandos ao ESP. A publicação aos participantes ocorre pelo Meet.
 ## Validação
 
 Testes automatizados: proporções e canais BGR, cores do padrão, identificação
-individual dos dedos, saída sem webcam, liberação da câmera virtual em falhas
-e validação dos argumentos. Comando:
+individual dos dedos, saída sem webcam, liberação da câmera virtual em falhas,
+contagem regressiva, confirmação e cancelamento do fundo, invalidação por mudança
+de resolução, transição reversível e inferência no vídeo original durante o
+efeito. Comando:
 
 ```sh
 .venv/bin/python -m unittest discover -s tests -v
@@ -96,3 +130,8 @@ marcações das mãos. Relatou espelhamento; o programa agora preserva a orienta
 original por padrão. Reinicie o processo para aplicar a alteração. A orientação
 vista por outro participante e cinco minutos sem travar ainda precisam ser
 confirmados; testes automatizados não comprovam esses critérios.
+
+Após a implementação da captura/invisibilidade inicial, os 109 testes passaram.
+A integração de teclado, captura, publicação e inferência foi testada com frames
+simulados; o efeito novo ainda precisa ser experimentado pelo usuário no ambiente
+real e no Meet.

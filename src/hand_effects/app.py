@@ -1,4 +1,4 @@
-"""Stage 1: tracked hands -> clean preview and OBS virtual camera."""
+"""Tracked hands and clean-background disappearance -> OBS virtual camera."""
 
 import argparse
 from contextlib import ExitStack
@@ -11,13 +11,14 @@ import time
 from hand_libras.app import ROOT, describe, draw_hands
 from hand_math.fingers import FingerTracker, attach_world_points
 from .output import fit_frame, open_virtual, test_pattern
+from .background import BackgroundEffect, handle_key, local_preview
 
 WINDOW = 'hand effects - camera output'
 FINGERS = ((1, 'indicador', 8), (2, 'medio', 12), (3, 'anelar', 16), (4, 'minimo', 20))
 
 
 def parser():
-    result = argparse.ArgumentParser(description='Maos na camera virtual para Google Meet (etapa 1)')
+    result = argparse.ArgumentParser(description='Maos e invisibilidade com fundo capturado para Google Meet')
     result.add_argument('--camera', type=int, default=1)
     result.add_argument('--preview-only', action='store_true', help='Somente janela local; nao abre camera virtual')
     result.add_argument('--check', action='store_true', help='Testar abertura da saida virtual sem acessar webcam')
@@ -25,6 +26,8 @@ def parser():
     result.add_argument('--width', type=int, default=1280, help='Largura da saida; nao altera modo da USB')
     result.add_argument('--height', type=int, default=720)
     result.add_argument('--fps', type=int, default=30, help='Limite de FPS; desempenho real depende da inferencia')
+    result.add_argument('--countdown', type=float, default=5., help='Segundos para sair da imagem ao capturar fundo')
+    result.add_argument('--fade', type=float, default=.5, help='Duracao da transicao de invisibilidade em segundos')
     orientation = result.add_mutually_exclusive_group()
     orientation.add_argument('--mirror', dest='no_mirror', action='store_false',
                              help='Espelhar o video enviado (opcional)')
@@ -55,6 +58,7 @@ def run(args):
     frames = failures = total_failures = 0
     timestamp = -1
     annotations = True
+    effect = BackgroundEffect(args.countdown, args.fade)
     with ExitStack() as stack:
         if not args.headless:
             stack.callback(cv2.destroyAllWindows)
@@ -84,7 +88,8 @@ def run(args):
             stack.callback(camera.release)
             if not camera.isOpened():
                 raise RuntimeError('Webcam indisponivel. Confira --camera, permissao do macOS e outros apps.')
-        print('Q/Esc: sair | H: alternar marcacoes. Janela e saida virtual mostram o mesmo video.', flush=True)
+        print('B: capturar fundo | ENTER: confirmar | I: invisibilidade | R: ao vivo | H: maos | Q/Esc: sair', flush=True)
+        print('Contagem, confirmacao e controles aparecem apenas na janela local. Fundo guardado em memoria.', flush=True)
         started = time.monotonic()
         while not args.max_frames or frames < args.max_frames:
             iteration = time.monotonic()
@@ -96,14 +101,17 @@ def run(args):
                     failures += 1
                     total_failures += 1
                     tracker.reset()
+                    effect.clear()
+                    effect.message = 'Captura interrompida. Use B para recapturar o fundo.'
                     if failures >= 20:
                         raise RuntimeError('20 falhas de captura. Confira USB, indice --camera e outros apps.')
                     time.sleep(.05)
                     continue
                 failures = 0
-                # Infer on original video before drawing/composition (future invisibility).
+                # Always infer on original video, even while publishing the background.
                 original = cv2.flip(raw, 1) if not args.no_mirror else raw
                 now = time.monotonic()
+                effect.update(original, now)
                 timestamp = max(timestamp + 1, int(now * 1000))
                 result = detector.detect_for_video(mp.Image(
                     image_format=mp.ImageFormat.SRGBA,
@@ -114,17 +122,21 @@ def run(args):
                 processed = original.copy()
                 if annotations:
                     annotate(cv2, processed, hands)
-                output = fit_frame(cv2, processed, args.width, args.height)
+                composed = effect.compose(cv2, processed, now)
+                output = fit_frame(cv2, composed, args.width, args.height)
             if virtual:
                 virtual.send(output)
             frames += 1
             if not args.headless:
-                cv2.imshow(WINDOW, output)
+                preview = output if args.test_pattern else local_preview(cv2, effect, output, time.monotonic())
+                cv2.imshow(WINDOW, preview)
                 key = cv2.waitKey(1) & 0xFF
                 if key in (27, ord('q')) or cv2.getWindowProperty(WINDOW, cv2.WND_PROP_VISIBLE) < 1:
                     break
                 if key == ord('h'):
                     annotations = not annotations
+                elif not args.test_pattern:
+                    handle_key(effect, key, time.monotonic())
             # Bound capture/preview rate too; no frame queue grows under load.
             time.sleep(max(0., 1 / args.fps - (time.monotonic() - iteration)))
     return dict(frames=frames, capture_failures=total_failures,
@@ -135,8 +147,9 @@ def main(argv=None):
     cli = parser()
     args = cli.parse_args(argv)
     if (not 64 <= args.width <= 3840 or not 64 <= args.height <= 2160
-            or args.width % 2 or args.height % 2 or not 1 <= args.fps <= 60 or args.max_frames < 0):
-        cli.error('Use dimensoes pares entre 64..3840 x 64..2160, fps 1..60 e max-frames >= 0')
+            or args.width % 2 or args.height % 2 or not 1 <= args.fps <= 60 or args.max_frames < 0
+            or not 1 <= args.countdown <= 30 or not 0 <= args.fade <= 3):
+        cli.error('Use dimensoes pares 64..3840 x 64..2160, fps 1..60, frames >= 0, countdown 1..30 e fade 0..3')
     if args.check and (args.preview_only or args.test_pattern):
         cli.error('--check testa somente a saida virtual; remova --preview-only/--test-pattern')
     try:

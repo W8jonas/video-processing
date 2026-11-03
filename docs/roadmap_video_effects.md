@@ -7,7 +7,8 @@ gesto, usando uma captura prévia do ambiente vazio.
 Este documento define um novo software, separado de `hand-esp`, Libras e
 geometria. A saída virtual com marcações foi implementada como `hand-effects`;
 consulte [preparação e comandos](hand_effects.md). Ainda não há aplicativo de
-invisibilidade. O usuário confirmou a câmera virtual e as marcações no Meet;
+remoção seletiva da pessoa. A invisibilidade inicial já alterna entre vídeo
+ao vivo e foto confirmada do fundo. O usuário confirmou a câmera virtual e as marcações no Meet;
 orientação no destinatário e estabilidade prolongada ainda precisam de validação.
 
 ## Decisões iniciais
@@ -116,7 +117,9 @@ Preview, vídeo publicado e diagnóstico devem ter saídas independentes.
 | E5 · Controle por gestos | Gesto confirmado alterna visível/invisível sem teclado | Dez ciclos consecutivos de ida/volta; um gesto mantido gera só uma ação; detector segue ativo no original |
 | E6 · Qualidade e desempenho | Reduzir halos, sombra residual e flicker; controlar atrasos | Sessão com iluminação real; medir FPS e latência completa; aceitar ou trocar o modelo com base no teste |
 
-Os critérios são metas de validação, não resultados já medidos.
+E2/E3 estão implementadas com captura em memória, confirmação explícita e
+transição por tecla, com testes automatizados. O ensaio real do novo efeito
+ainda está pendente. Os critérios da tabela são metas, não resultados já medidos.
 
 ### E1 · Primeiro entregável
 
@@ -178,7 +181,12 @@ extensão precisava ser ativada pelo usuário. Depois da ativação, o usuário
 confirmou a câmera virtual no Meet com marcações das mãos. Após relato de
 espelhamento, a saída passou a preservar a orientação original por padrão.
 
-Próximo trabalho: conferir orientação no destinatário e estabilidade da E1,
-seguindo para captura do fundo (E2) e remoção seletiva. Os programas e a integração ESP existentes
-continuam disponíveis. O novo pacote `hand_effects` contém captura, marcações,
-preview e saída virtual; fundo, segmentação e composição virão nas etapas seguintes.
+E2/E3 foram implementadas: B inicia contagem, Enter confirma a referência,
+I alterna a foto inteira do fundo com o vídeo e R retorna ao vivo. A interface
+local mostra a contagem e a confirmação; a saída virtual recebe apenas o vídeo
+composto. Os 109 testes passaram, incluindo integração com frames simulados.
+
+Próximo trabalho: experimentar a captura/invisibilidade inicial no ambiente real
+e no Meet, seguindo para remoção seletiva (E4). O novo pacote `hand_effects`
+contém captura, marcações, preview, fundo em memória, transição e saída virtual;
+segmentação e controle por gestos virão nas etapas seguintes.

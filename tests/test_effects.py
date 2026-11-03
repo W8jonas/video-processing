@@ -10,6 +10,7 @@ import numpy as np
 
 from hand_effects.app import annotate, main, parser, run
 from hand_effects.output import fit_frame, open_virtual, test_pattern
+from hand_effects.background import BackgroundEffect
 
 
 class OutputTests(unittest.TestCase):
@@ -55,6 +56,38 @@ class OutputTests(unittest.TestCase):
 
 
 class PipelineTests(unittest.TestCase):
+    def test_confirmed_background_replaces_output_but_inference_keeps_reading_live_camera(self):
+        from mediapipe.tasks.python import vision
+        camera = MagicMock()
+        camera.read.side_effect = [(True, np.full((240, 320, 3), value, dtype=np.uint8))
+                                  for value in (20, 30, 40)]
+        detector = MagicMock()
+        detector.__enter__.return_value = detector
+        detector.detect_for_video.return_value = SimpleNamespace(
+            hand_landmarks=[], hand_world_landmarks=[], handedness=[])
+        sink = MagicMock()
+        sink.__enter__.return_value = sink
+        effect = BackgroundEffect(fade=0.)
+        effect.begin_capture(-10.)
+        args = parser().parse_args(['--max-frames', '3'])
+        def paint(cv, frame, hands):
+            frame[:] = 200
+        with patch.object(cv2, 'VideoCapture', return_value=camera), \
+                patch.object(vision.HandLandmarker, 'create_from_options', return_value=detector), \
+                patch('hand_effects.app.open_virtual', return_value=sink), \
+                patch('hand_effects.app.BackgroundEffect', return_value=effect), \
+                patch('hand_effects.app.annotate', side_effect=paint), \
+                patch.object(cv2, 'imshow'), patch.object(cv2, 'destroyAllWindows'), \
+                patch.object(cv2, 'getWindowProperty', return_value=1), \
+                patch.object(cv2, 'waitKey', side_effect=[13, ord('i'), ord('q')]):
+            self.assertEqual(run(args)['frames'], 3)
+        outputs = [call.args[0] for call in sink.send.call_args_list]
+        self.assertEqual([frame[360, 640, 0] for frame in outputs], [200, 200, 20])
+        inferred = [call.args[0].numpy_view()[0, 0, 0] for call in detector.detect_for_video.call_args_list]
+        self.assertEqual(inferred, [20, 30, 40])
+        self.assertTrue((effect.background == 20).all())
+        camera.release.assert_called_once()
+
     def test_camera_inference_reads_unpainted_frames_and_resources_close_on_capture_loss(self):
         from mediapipe.tasks.python import vision
         raw = np.full((240, 320, 3), 20, dtype=np.uint8)
@@ -119,6 +152,7 @@ class PipelineTests(unittest.TestCase):
 
     def test_invalid_dimensions_and_check_preview_combination_fail_before_hardware(self):
         for argv in (['--width', '1279'], ['--fps', '0'], ['--max-frames', '-1'],
+                     ['--countdown', '0'], ['--fade', '-1'], ['--fade', 'nan'],
                      ['--check', '--preview-only']):
             with self.subTest(argv=argv), patch('sys.stderr', new_callable=StringIO):
                 with self.assertRaises(SystemExit):

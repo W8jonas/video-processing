@@ -4,8 +4,10 @@ Novo programa: **vídeo processado para o Google Meet** com câmera virtual.
 Execute `.venv/bin/hand-effects --camera 1` após autorizar a extensão do OBS.
 [Preparação e comandos](docs/hand_effects.md). A primeira etapa foi implementada;
 o usuário confirmou a seleção da câmera virtual e as marcações no Meet.
-A invisibilidade por gestos
-segue no [roadmap em etapas](docs/roadmap_video_effects.md).
+Agora é possível capturar o fundo com **B**, confirmar com **Enter** e
+desaparecer/reaparecer com **I**. **R** retorna ao vivo imediatamente.
+Esta primeira versão mostra a foto inteira do cenário; remoção seletiva da
+pessoa e controle por gesto seguem no [roadmap em etapas](docs/roadmap_video_effects.md).
 
 Protótipo local com webcam, MediaPipe Tasks e OpenCV. Desenha 21 articulações por
 mão, acompanha até duas mãos, estima quais dedos estão estendidos e permite
