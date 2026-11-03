@@ -1,0 +1,19 @@
+[build-system]
+requires = ["setuptools>=68"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "hand-libras"
+version = "0.1.0"
+description = "Protótipo local de rastreamento de mãos e calibração de poses de Libras"
+requires-python = ">=3.12,<3.13"
+dependencies = [
+    "mediapipe==0.10.35",
+    "opencv-contrib-python>=4.11,<5",
+]
+
+[project.scripts]
+hand-libras = "hand_libras.app:main"
+
+[tool.setuptools.packages.find]
+where = ["src"]
